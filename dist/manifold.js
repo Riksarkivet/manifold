@@ -205,6 +205,7 @@ var Manifold;
                     url: that.dataUri,
                     type: type,
                     dataType: 'json',
+                    xhrFields: { withCredentials: true },
                     beforeSend: function (xhr) {
                         if (accessToken) {
                             xhr.setRequestHeader("Authorization", "Bearer " + accessToken.accessToken);
