@@ -12432,35 +12432,34 @@ var Manifold;
             this._options = options;
         }
         Bootstrapper.prototype.bootstrap = function () {
+            var _this = this;
             var that = this;
             return new Promise(function (resolve, reject) {
                 var msie = that._msieversion();
-                // if not a recent version of IE
-                if (msie > 0 && msie < 11) {
-                    if (msie === 9) {
-                        // CORS not available, use jsonp
-                        var settings = {
-                            url: that._options.iiifResourceUri,
-                            type: 'GET',
-                            dataType: 'jsonp',
-                            jsonp: 'callback',
-                            jsonpCallback: 'manifestCallback'
-                        };
-                        $.ajax(settings);
-                        window.manifestCallback = function (json) {
-                            that._loaded(that, JSON.stringify(json), resolve, reject);
-                        };
-                    }
-                    else if (msie === 10) {
-                        $.getJSON(that._options.iiifResourceUri, function (json) {
-                            that._loaded(that, JSON.stringify(json), resolve, reject);
-                        });
-                    }
+                if (msie === 9 || !_this._options.isCORSEnabled) {
+                    var settings = {
+                        url: _this._options.iiifResourceUri,
+                        type: 'GET',
+                        dataType: 'jsonp',
+                        jsonp: 'callback',
+                        jsonpCallback: 'manifestCallback'
+                    };
+                    $.ajax(settings);
+                    window.manifestCallback = function (json) {
+                        _this._loaded(_this, JSON.stringify(json), resolve, reject);
+                    };
                 }
                 else {
-                    manifesto.loadManifest(that._options.iiifResourceUri).then(function (json) {
-                        that._loaded(that, json, resolve, reject);
-                    });
+                    var settings = {
+                        url: _this._options.iiifResourceUri,
+                        type: 'GET',
+                        dataType: 'json',
+                        xhrFields: { withCredentials: true },
+                        success: function (json) {
+                            _this._loaded(_this, JSON.stringify(json), resolve, reject);
+                        }
+                    };
+                    $.ajax(settings);
                 }
             });
         };
