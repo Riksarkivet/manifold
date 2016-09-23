@@ -16,36 +16,29 @@ namespace Manifold {
 
                 var msie = that._msieversion();
 
-                // if not a recent version of IE
-                if (msie > 0 && msie < 11){
-                    
-                    if (msie === 9){
-                        // CORS not available, use jsonp
-
-                        var settings: JQueryAjaxSettings = <JQueryAjaxSettings>{
-                            url: that._options.iiifResourceUri,
-                            type: 'GET',
-                            dataType: 'jsonp',
-                            jsonp: 'callback',
-                            jsonpCallback: 'manifestCallback'
-                        };
-
-                        $.ajax(settings);
-
-                        window.manifestCallback = (json: any) => {
-                            that._loaded(that, JSON.stringify(json), resolve, reject);
-                        };
-
-                    } else if (msie === 10){
-                        $.getJSON(that._options.iiifResourceUri, (json) => {
-                            that._loaded(that, JSON.stringify(json), resolve, reject);
-                        });
-                    }
-
+                if (msie === 9 || !this._options.isCORSEnabled){
+                    var settings: JQueryAjaxSettings = <JQueryAjaxSettings>{
+                        url: this._options.iiifResourceUri,
+                        type: 'GET',
+                        dataType: 'jsonp',
+                        jsonp: 'callback',
+                        jsonpCallback: 'manifestCallback'
+                    };
+                    $.ajax(settings);
+                    window.manifestCallback = (json: any) => {
+                        this._loaded(this, JSON.stringify(json), resolve, reject);
+                    };
                 } else {
-                    manifesto.loadManifest(that._options.iiifResourceUri).then(function(json){                     
-                        that._loaded(that, json, resolve, reject)
-                    });
+                    var settings: JQueryAjaxSettings = <JQueryAjaxSettings>{
+                        url: this._options.iiifResourceUri,
+                        type: 'GET',
+                        dataType: 'json',
+                        xhrFields: { withCredentials: true },
+                        success: (json) => {
+                            this._loaded(this, JSON.stringify(json), resolve, reject);
+                        }
+                    };
+                    $.ajax(settings);
                 }
 
             });
@@ -113,8 +106,8 @@ namespace Manifold {
             } else {        // If another browser, return 0
                 return 0;
             }
-        } 
-        
+        }
+
     }
     
 }
