@@ -138,7 +138,6 @@ namespace Manifold {
         }
         
         public getFirstPageIndex(): number {
-	    alert('test');
 	    if (this.canvasIndex == 0)
 		return -1
 
@@ -196,7 +195,6 @@ namespace Manifold {
         }
         
         public getLastPageIndex(): number {
-	    alert('test');
 	    if (this.canvasIndex == this.getTotalCanvases() - 1)
 		return -1
 
