@@ -16,9 +16,11 @@ namespace Manifold {
         public width: number;
         public x: number;
         public y: number;
+        public isCORSEnabled: boolean;
 
-        constructor(resource: Manifesto.IManifestResource, dataUriFunc: (r: Manifesto.IManifestResource) => string) {
+        constructor(resource: Manifesto.IManifestResource, dataUriFunc: (r: Manifesto.IManifestResource) => string, isCORSEnabled: boolean = true) {
             resource.externalResource = this;
+            this.isCORSEnabled = isCORSEnabled;
             this.dataUri = dataUriFunc(resource);
             this._parseAuthServices(resource);
         }
@@ -52,8 +54,52 @@ namespace Manifold {
             return this.dataUri.endsWith('info.json');
         }
 
+        private imageInfoIsLoaded(data, resolve) {
+
+            // if it's a resource without an info.json
+            // todo: if resource doesn't have a @profile
+            if (!data){
+                this.status = HTTPStatusCode.OK;
+                resolve(this);
+            } else {
+                var uri = unescape(data['@id']);
+
+                this.data = data;
+                this._parseAuthServices(this.data);
+
+                // remove trailing /info.json
+                if (uri.endsWith('/info.json')){
+                    uri = uri.substr(0, uri.lastIndexOf('/'));
+                }
+
+                var dataUri = this.dataUri;
+
+                if (dataUri.endsWith('/info.json')){
+                    dataUri = dataUri.substr(0, dataUri.lastIndexOf('/'));
+                }
+
+                // if the request was redirected to a degraded version and there's a login service to get the full quality version
+                if (uri !== dataUri && this.loginService){
+                    this.status = HTTPStatusCode.MOVED_TEMPORARILY;
+                } else {
+                    this.status = HTTPStatusCode.OK;
+                }
+
+                resolve(this);
+            }
+
+        }
+
+        private imageInfoHandleError(error, resolve) {
+            this.status = error.status;
+            this.error = error;
+            if (error.responseJSON){
+                this._parseAuthServices(error.responseJSON);
+            }
+            resolve(this);
+        }
+
         public getData(accessToken?: Manifesto.IAccessToken): Promise<Manifesto.IExternalResource> {
-            var that = this;
 
             return new Promise<Manifesto.IExternalResource>((resolve, reject) => {
 
@@ -62,75 +108,58 @@ namespace Manifold {
 
                 var type: string = 'GET';
 
-                if (!that.hasServiceDescriptor()){
+                if (!this.hasServiceDescriptor()){
                     // If access control is unnecessary, short circuit the process.
                     // Note that isAccessControlled check for short-circuiting only
                     // works in the "binary resource" context, since in that case,
                     // we know about access control from the manifest. For image
                     // resources, we need to check info.json for details and can't
                     // short-circuit like this.
-                    if (!that.isAccessControlled()) {
-                        that.status = HTTPStatusCode.OK;
-                        resolve(that);
+                    if (!this.isAccessControlled()) {
+                        this.status = HTTPStatusCode.OK;
+                        resolve(this);
                         return;
                     }
                     type = 'HEAD';
                 }
 
-                $.ajax(<JQueryAjaxSettings>{
-                    url: that.dataUri,
-                    type: type,
-                    dataType: 'json',
-                    xhrFields: { withCredentials: true },
-                    beforeSend: (xhr) => {
-                        if (accessToken){
-                            xhr.setRequestHeader("Authorization", "Bearer " + accessToken.accessToken);
+                if (this.isCORSEnabled) {
+
+                    $.ajax(<JQueryAjaxSettings>{
+                        url: this.dataUri,
+                        type: type,
+                        dataType: 'json',
+                        xhrFields: { withCredentials: true },
+                        beforeSend: (xhr) => {
+                            if (accessToken) {
+                                xhr.setRequestHeader("Authorization", "Bearer " + accessToken.accessToken);
+                            }
                         }
-                    }
-                }).done((data) => {
+                    }).done((data) => {
+                        this.imageInfoIsLoaded(data, resolve);
+                    }).fail((error) => {
+                        this.imageInfoHandleError(error, resolve);
+                    });
 
-                    // if it's a resource without an info.json
-                    // todo: if resource doesn't have a @profile
-                    if (!data){
-                        that.status = HTTPStatusCode.OK;
-                        resolve(that);
-                    } else {
-                        var uri = unescape(data['@id']);
 
-                        that.data = data;
-                        that._parseAuthServices(that.data);
+                } else {
 
-                        // remove trailing /info.json
-                        if (uri.endsWith('/info.json')){
-                            uri = uri.substr(0, uri.lastIndexOf('/'));
-                        }
+                    var settings: JQueryAjaxSettings = <JQueryAjaxSettings>{
+                        url: this.dataUri,
+                        type: 'GET',
+                        dataType: 'jsonp',
+                        jsonp: 'callback',
+                        jsonpCallback: 'imageInfoCallback'
+                    };
+                    $.ajax(settings);
+                    window.imageInfoCallback = (json: any) => {
+                        this.imageInfoIsLoaded(json, resolve);
+                    };
 
-                        var dataUri = that.dataUri;
 
-                        if (dataUri.endsWith('/info.json')){
-                            dataUri = dataUri.substr(0, dataUri.lastIndexOf('/'));
-                        }
+                }
 
-                        // if the request was redirected to a degraded version and there's a login service to get the full quality version
-                        if (uri !== dataUri && that.loginService){
-                            that.status = HTTPStatusCode.MOVED_TEMPORARILY;
-                        } else {
-                            that.status = HTTPStatusCode.OK;
-                        }
 
-                        resolve(that);
-                    }
-
-                }).fail((error) => {
-
-                    that.status = error.status;
-                    that.error = error;
-                    if (error.responseJSON){
-                        that._parseAuthServices(error.responseJSON);
-                    }
-                    resolve(that);
-
-                });
             });
         }
     }

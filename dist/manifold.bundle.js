@@ -12527,9 +12527,11 @@ var Manifold;
 var Manifold;
 (function (Manifold) {
     var ExternalResource = (function () {
-        function ExternalResource(resource, dataUriFunc) {
+        function ExternalResource(resource, dataUriFunc, isCORSEnabled) {
+            if (isCORSEnabled === void 0) { isCORSEnabled = true; }
             this.isResponseHandled = false;
             resource.externalResource = this;
+            this.isCORSEnabled = isCORSEnabled;
             this.dataUri = dataUriFunc(resource);
             this._parseAuthServices(resource);
         }
@@ -12560,72 +12562,93 @@ var Manifold;
         ExternalResource.prototype.hasServiceDescriptor = function () {
             return this.dataUri.endsWith('info.json');
         };
+        ExternalResource.prototype.imageInfoIsLoaded = function (data, resolve) {
+            // if it's a resource without an info.json
+            // todo: if resource doesn't have a @profile
+            if (!data) {
+                this.status = HTTPStatusCode.OK;
+                resolve(this);
+            }
+            else {
+                var uri = unescape(data['@id']);
+                this.data = data;
+                this._parseAuthServices(this.data);
+                // remove trailing /info.json
+                if (uri.endsWith('/info.json')) {
+                    uri = uri.substr(0, uri.lastIndexOf('/'));
+                }
+                var dataUri = this.dataUri;
+                if (dataUri.endsWith('/info.json')) {
+                    dataUri = dataUri.substr(0, dataUri.lastIndexOf('/'));
+                }
+                // if the request was redirected to a degraded version and there's a login service to get the full quality version
+                if (uri !== dataUri && this.loginService) {
+                    this.status = HTTPStatusCode.MOVED_TEMPORARILY;
+                }
+                else {
+                    this.status = HTTPStatusCode.OK;
+                }
+                resolve(this);
+            }
+        };
+        ExternalResource.prototype.imageInfoHandleError = function (error, resolve) {
+            this.status = error.status;
+            this.error = error;
+            if (error.responseJSON) {
+                this._parseAuthServices(error.responseJSON);
+            }
+            resolve(this);
+        };
         ExternalResource.prototype.getData = function (accessToken) {
-            var that = this;
+            var _this = this;
             return new Promise(function (resolve, reject) {
                 // check if dataUri ends with info.json
                 // if not issue a HEAD request.
                 var type = 'GET';
-                if (!that.hasServiceDescriptor()) {
+                if (!_this.hasServiceDescriptor()) {
                     // If access control is unnecessary, short circuit the process.
                     // Note that isAccessControlled check for short-circuiting only
                     // works in the "binary resource" context, since in that case,
                     // we know about access control from the manifest. For image
                     // resources, we need to check info.json for details and can't
                     // short-circuit like this.
-                    if (!that.isAccessControlled()) {
-                        that.status = HTTPStatusCode.OK;
-                        resolve(that);
+                    if (!_this.isAccessControlled()) {
+                        _this.status = HTTPStatusCode.OK;
+                        resolve(_this);
                         return;
                     }
                     type = 'HEAD';
                 }
-                $.ajax({
-                    url: that.dataUri,
-                    type: type,
-                    dataType: 'json',
-                    xhrFields: { withCredentials: true },
-                    beforeSend: function (xhr) {
-                        if (accessToken) {
-                            xhr.setRequestHeader("Authorization", "Bearer " + accessToken.accessToken);
+                if (_this.isCORSEnabled) {
+                    $.ajax({
+                        url: _this.dataUri,
+                        type: type,
+                        dataType: 'json',
+                        xhrFields: { withCredentials: true },
+                        beforeSend: function (xhr) {
+                            if (accessToken) {
+                                xhr.setRequestHeader("Authorization", "Bearer " + accessToken.accessToken);
+                            }
                         }
-                    }
-                }).done(function (data) {
-                    // if it's a resource without an info.json
-                    // todo: if resource doesn't have a @profile
-                    if (!data) {
-                        that.status = HTTPStatusCode.OK;
-                        resolve(that);
-                    }
-                    else {
-                        var uri = unescape(data['@id']);
-                        that.data = data;
-                        that._parseAuthServices(that.data);
-                        // remove trailing /info.json
-                        if (uri.endsWith('/info.json')) {
-                            uri = uri.substr(0, uri.lastIndexOf('/'));
-                        }
-                        var dataUri = that.dataUri;
-                        if (dataUri.endsWith('/info.json')) {
-                            dataUri = dataUri.substr(0, dataUri.lastIndexOf('/'));
-                        }
-                        // if the request was redirected to a degraded version and there's a login service to get the full quality version
-                        if (uri !== dataUri && that.loginService) {
-                            that.status = HTTPStatusCode.MOVED_TEMPORARILY;
-                        }
-                        else {
-                            that.status = HTTPStatusCode.OK;
-                        }
-                        resolve(that);
-                    }
-                }).fail(function (error) {
-                    that.status = error.status;
-                    that.error = error;
-                    if (error.responseJSON) {
-                        that._parseAuthServices(error.responseJSON);
-                    }
-                    resolve(that);
-                });
+                    }).done(function (data) {
+                        _this.imageInfoIsLoaded(data, resolve);
+                    }).fail(function (error) {
+                        _this.imageInfoHandleError(error, resolve);
+                    });
+                }
+                else {
+                    var settings = {
+                        url: _this.dataUri,
+                        type: 'GET',
+                        dataType: 'jsonp',
+                        jsonp: 'callback',
+                        jsonpCallback: 'imageInfoCallback'
+                    };
+                    $.ajax(settings);
+                    window.imageInfoCallback = function (json) {
+                        _this.imageInfoIsLoaded(json, resolve);
+                    };
+                }
             });
         };
         return ExternalResource;
@@ -12739,6 +12762,9 @@ var Manifold;
             return element.getType();
         };
         Helper.prototype.getFirstPageIndex = function () {
+            if (this.canvasIndex == 0) {
+                return -1;
+            }
             return 0;
         };
         Helper.prototype.getInfoUri = function (canvas) {
@@ -12778,6 +12804,9 @@ var Manifold;
             return this.getCurrentSequence().getLastCanvasLabel(alphanumeric);
         };
         Helper.prototype.getLastPageIndex = function () {
+            if (this.canvasIndex == this.getTotalCanvases() - 1) {
+                return -1;
+            }
             return this.getTotalCanvases() - 1;
         };
         Helper.prototype.getLicense = function () {
