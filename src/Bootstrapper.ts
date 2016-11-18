@@ -6,6 +6,7 @@ namespace Manifold {
         
         constructor(options: Manifold.IManifoldOptions){
             this._options = options;
+            this._options.locale = this._options.locale || 'en-GB'; // default locale
         }
 
         public bootstrap(): Promise<Manifold.IHelper> {

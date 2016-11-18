@@ -1,4 +1,4 @@
-// manifold v1.0.3 https://github.com/viewdir/manifold#readme
+// manifold v1.1.4 https://github.com/viewdir/manifold#readme
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.manifold = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 var Manifold;
 (function (Manifold) {
@@ -51,6 +51,7 @@ var Manifold;
     var Bootstrapper = (function () {
         function Bootstrapper(options) {
             this._options = options;
+            this._options.locale = this._options.locale || 'en-GB'; // default locale
         }
         Bootstrapper.prototype.bootstrap = function () {
             var _this = this;
@@ -157,9 +158,9 @@ var Manifold;
             this._parseAuthServices(resource);
         }
         ExternalResource.prototype._parseAuthServices = function (resource) {
-            this.clickThroughService = manifesto.getService(resource, manifesto.ServiceProfile.clickThrough().toString());
-            this.loginService = manifesto.getService(resource, manifesto.ServiceProfile.login().toString());
-            this.restrictedService = manifesto.getService(resource, manifesto.ServiceProfile.restricted().toString());
+            this.clickThroughService = manifesto.Utils.getService(resource, manifesto.ServiceProfile.clickThrough().toString());
+            this.loginService = manifesto.Utils.getService(resource, manifesto.ServiceProfile.login().toString());
+            this.restrictedService = manifesto.Utils.getService(resource, manifesto.ServiceProfile.restricted().toString());
             // todo: create this.preferredService?
             if (this.clickThroughService) {
                 this.logoutService = this.clickThroughService.getService(manifesto.ServiceProfile.logout().toString());
@@ -281,13 +282,14 @@ var Manifold;
 (function (Manifold) {
     var Helper = (function () {
         function Helper(options) {
-            this.iiifResource = options.iiifResource;
-            this.iiifResourceUri = options.iiifResourceUri;
-            this.manifest = options.manifest;
-            this.collectionIndex = options.collectionIndex || 0;
-            this.manifestIndex = options.manifestIndex || 0;
-            this.sequenceIndex = options.sequenceIndex || 0;
-            this.canvasIndex = options.canvasIndex || 0;
+            this.options = options;
+            this.iiifResource = this.options.iiifResource;
+            this.iiifResourceUri = this.options.iiifResourceUri;
+            this.manifest = this.options.manifest;
+            this.collectionIndex = this.options.collectionIndex || 0;
+            this.manifestIndex = this.options.manifestIndex || 0;
+            this.sequenceIndex = this.options.sequenceIndex || 0;
+            this.canvasIndex = this.options.canvasIndex || 0;
         }
         // getters //
         Helper.prototype.getAutoCompleteService = function () {
@@ -297,7 +299,7 @@ var Manifold;
             return service.getService(manifesto.ServiceProfile.autoComplete());
         };
         Helper.prototype.getAttribution = function () {
-            return this.manifest.getAttribution();
+            return Manifesto.TranslationCollection.getValue(this.manifest.getAttribution());
         };
         Helper.prototype.getCanvases = function () {
             return this.getCurrentSequence().getCanvases();
@@ -322,18 +324,6 @@ var Manifold;
         Helper.prototype.getCanvasIndexByLabel = function (label) {
             var foliated = this.getManifestType().toString() === manifesto.ManifestType.manuscript().toString();
             return this.getCurrentSequence().getCanvasIndexByLabel(label, foliated);
-        };
-        Helper.prototype.getCanvasMetadata = function (canvas) {
-            var result = [];
-            var metadata = canvas.getMetadata();
-            if (metadata) {
-                result.push({
-                    label: "metadata",
-                    value: metadata,
-                    isRootLevel: true
-                });
-            }
-            return result;
         };
         Helper.prototype.getCanvasRange = function (canvas, path) {
             var ranges = this.getCanvasRanges(canvas);
@@ -402,7 +392,7 @@ var Manifold;
                     if (!id.endsWith('/')) {
                         id += '/';
                     }
-                    if (manifesto.isImageProfile(service.getProfile())) {
+                    if (manifesto.Utils.isImageProfile(service.getProfile())) {
                         infoUri = id + 'info.json';
                     }
                 }
@@ -419,7 +409,7 @@ var Manifold;
             }
         };
         Helper.prototype.getLabel = function () {
-            return this.manifest.getLabel();
+            return Manifesto.TranslationCollection.getValue(this.manifest.getLabel());
         };
         Helper.prototype.getLastCanvasLabel = function (alphanumeric) {
             return this.getCurrentSequence().getLastCanvasLabel(alphanumeric);
@@ -444,51 +434,116 @@ var Manifold;
             }
             return manifestType;
         };
-        Helper.prototype.getMetadata = function (licenseFormatter) {
-            var result = [];
-            var metadata = this.manifest.getMetadata();
-            if (metadata) {
-                result.push({
-                    label: "metadata",
-                    value: metadata,
-                    isRootLevel: true
-                });
+        Helper.prototype.getMetadata = function (options) {
+            var metadataGroups = [];
+            var manifestMetadata = this.manifest.getMetadata();
+            var manifestGroup = new Manifold.MetadataGroup(this.manifest);
+            if (manifestMetadata && manifestMetadata.length) {
+                manifestGroup.addMetadata(manifestMetadata, true);
             }
-            if (this.manifest.getDescription()) {
-                result.push({
-                    label: "description",
-                    value: this.manifest.getDescription(),
-                    isRootLevel: true
-                });
+            if (this.manifest.getDescription().length) {
+                var metadataItem = new Manifesto.MetadataItem(this.options.locale);
+                metadataItem.label = [new Manifesto.Translation("description", this.options.locale)];
+                metadataItem.value = this.manifest.getDescription();
+                metadataItem.isRootLevel = true;
+                manifestGroup.addItem(metadataItem);
             }
-            if (this.manifest.getAttribution()) {
-                result.push({
-                    label: "attribution",
-                    value: this.manifest.getAttribution(),
-                    isRootLevel: true
-                });
+            if (this.manifest.getAttribution().length) {
+                var metadataItem = new Manifesto.MetadataItem(this.options.locale);
+                metadataItem.label = [new Manifesto.Translation("attribution", this.options.locale)];
+                metadataItem.value = this.manifest.getAttribution();
+                metadataItem.isRootLevel = true;
+                manifestGroup.addItem(metadataItem);
             }
             if (this.manifest.getLicense()) {
-                result.push({
+                var item = {
                     label: "license",
-                    value: licenseFormatter ? licenseFormatter.format(this.manifest.getLicense()) : this.manifest.getLicense(),
-                    isRootLevel: true
-                });
+                    value: (options && options.licenseFormatter) ? options.licenseFormatter.format(this.manifest.getLicense()) : this.manifest.getLicense()
+                };
+                var metadataItem = new Manifesto.MetadataItem(this.options.locale);
+                metadataItem.parse(item);
+                metadataItem.isRootLevel = true;
+                manifestGroup.addItem(metadataItem);
             }
             if (this.manifest.getLogo()) {
-                result.push({
+                var item = {
                     label: "logo",
-                    value: '<img src="' + this.manifest.getLogo() + '"/>',
-                    isRootLevel: true
-                });
+                    value: '<img src="' + this.manifest.getLogo() + '"/>'
+                };
+                var metadataItem = new Manifesto.MetadataItem(this.options.locale);
+                metadataItem.parse(item);
+                metadataItem.isRootLevel = true;
+                manifestGroup.addItem(metadataItem);
             }
-            return result;
+            metadataGroups.push(manifestGroup);
+            if (options) {
+                return this._parseMetadataOptions(options, metadataGroups);
+            }
+            else {
+                return metadataGroups;
+            }
+        };
+        Helper.prototype._parseMetadataOptions = function (options, metadataGroups) {
+            // get sequence metadata
+            var sequence = this.getCurrentSequence();
+            var sequenceMetadata = sequence.getMetadata();
+            if (sequenceMetadata && sequenceMetadata.length) {
+                var sequenceGroup = new Manifold.MetadataGroup(sequence);
+                sequenceGroup.addMetadata(sequenceMetadata);
+                metadataGroups.push(sequenceGroup);
+            }
+            // get range metadata
+            if (options.range) {
+                var rangeGroups = this._getRangeMetadata([], options.range);
+                rangeGroups = rangeGroups.reverse();
+                metadataGroups = metadataGroups.concat(rangeGroups);
+            }
+            // get canvas metadata
+            if (options.canvases && options.canvases.length) {
+                for (var i = 0; i < options.canvases.length; i++) {
+                    var canvas = options.canvases[i];
+                    var canvasMetadata = canvas.getMetadata();
+                    if (canvasMetadata && canvasMetadata.length) {
+                        var canvasGroup = new Manifold.MetadataGroup(canvas);
+                        canvasGroup.addMetadata(canvas.getMetadata());
+                        metadataGroups.push(canvasGroup);
+                    }
+                    // add image metadata
+                    var images = canvas.getImages();
+                    for (var j = 0; j < images.length; j++) {
+                        var image = images[j];
+                        var imageMetadata = image.getMetadata();
+                        if (imageMetadata && imageMetadata.length) {
+                            var imageGroup = new Manifold.MetadataGroup(image);
+                            imageGroup.addMetadata(imageMetadata);
+                            metadataGroups.push(imageGroup);
+                        }
+                    }
+                }
+            }
+            return metadataGroups;
+        };
+        Helper.prototype._getRangeMetadata = function (metadataGroups, range) {
+            var rangeMetadata = range.getMetadata();
+            if (rangeMetadata && rangeMetadata.length) {
+                var rangeGroup = new Manifold.MetadataGroup(range);
+                rangeGroup.addMetadata(rangeMetadata);
+                metadataGroups.push(rangeGroup);
+            }
+            if (range.parentRange) {
+                return this._getRangeMetadata(metadataGroups, range.parentRange);
+            }
+            else {
+                return metadataGroups;
+            }
         };
         Helper.prototype.getMultiSelectState = function () {
-            var m = new Manifold.MultiSelectState();
-            m.ranges = this.getRanges().clone();
-            m.canvases = this.getCurrentSequence().getCanvases().clone();
-            return m;
+            if (!this._multiSelectState) {
+                this._multiSelectState = new Manifold.MultiSelectState();
+                this._multiSelectState.ranges = this.getRanges().clone();
+                this._multiSelectState.canvases = this.getCurrentSequence().getCanvases().clone();
+            }
+            return this._multiSelectState;
         };
         Helper.prototype.getRanges = function () {
             return this.manifest.getAllRanges();
@@ -570,7 +625,7 @@ var Manifold;
             }
             else {
                 var topRanges = this.iiifResource.getTopRanges();
-                var root = manifesto.getTreeNode();
+                var root = new manifesto.TreeNode();
                 root.label = 'root';
                 root.data = this.iiifResource;
                 if (topRanges.length) {
@@ -581,7 +636,7 @@ var Manifold;
                     return root;
                 }
             }
-            var sortedTree = manifesto.getTreeNode();
+            var sortedTree = new manifesto.TreeNode();
             switch (sortType.toString()) {
                 case Manifold.TreeSortType.DATE.toString():
                     // returns a list of treenodes for each decade.
@@ -702,7 +757,7 @@ var Manifold;
                 var node = nodes[i];
                 var year = this.getNodeYear(node);
                 var month = this.getNodeMonth(node);
-                var dateNode = manifesto.getTreeNode();
+                var dateNode = new manifesto.TreeNode();
                 dateNode.id = node.id;
                 dateNode.label = this.getNodeDisplayDate(node);
                 dateNode.data = node.data;
@@ -729,7 +784,7 @@ var Manifold;
                 var decade = Number(year.toString().substr(2, 1));
                 var endYear = Number(year.toString().substr(0, 3) + "9");
                 if (!this.getDecadeNode(rootNode, year)) {
-                    decadeNode = manifesto.getTreeNode();
+                    decadeNode = new manifesto.TreeNode();
                     decadeNode.label = year + " - " + endYear;
                     decadeNode.navDate = node.navDate;
                     decadeNode.data.startYear = year;
@@ -747,7 +802,7 @@ var Manifold;
                 var decadeNode = this.getDecadeNode(rootNode, year);
                 var yearNode = this.getYearNode(decadeNode, year);
                 if (decadeNode && yearNode && !this.getMonthNode(yearNode, month)) {
-                    monthNode = manifesto.getTreeNode();
+                    monthNode = new manifesto.TreeNode();
                     monthNode.label = this.getNodeDisplayMonth(node);
                     monthNode.navDate = node.navDate;
                     monthNode.data.year = year;
@@ -763,7 +818,7 @@ var Manifold;
                 var year = this.getNodeYear(node);
                 var decadeNode = this.getDecadeNode(rootNode, year);
                 if (decadeNode && !this.getYearNode(decadeNode, year)) {
-                    yearNode = manifesto.getTreeNode();
+                    yearNode = new manifesto.TreeNode();
                     yearNode.label = year.toString();
                     yearNode.navDate = node.navDate;
                     yearNode.data.year = year;
@@ -887,6 +942,40 @@ var Manifold;
 
 var Manifold;
 (function (Manifold) {
+    var MetadataGroup = (function () {
+        function MetadataGroup(resource, label) {
+            this.items = [];
+            this.resource = resource;
+            this.label = label;
+        }
+        MetadataGroup.prototype.addItem = function (item) {
+            this.items.push(item);
+        };
+        MetadataGroup.prototype.addMetadata = function (metadata, isRootLevel) {
+            if (isRootLevel === void 0) { isRootLevel = false; }
+            for (var i = 0; i < metadata.length; i++) {
+                var item = metadata[i];
+                item.isRootLevel = isRootLevel;
+                this.addItem(item);
+            }
+        };
+        return MetadataGroup;
+    }());
+    Manifold.MetadataGroup = MetadataGroup;
+})(Manifold || (Manifold = {}));
+
+var Manifold;
+(function (Manifold) {
+    var MetadataOptions = (function () {
+        function MetadataOptions() {
+        }
+        return MetadataOptions;
+    }());
+    Manifold.MetadataOptions = MetadataOptions;
+})(Manifold || (Manifold = {}));
+
+var Manifold;
+(function (Manifold) {
     var MultiSelectState = (function () {
         function MultiSelectState() {
             this.isEnabled = false;
@@ -974,6 +1063,18 @@ var Manifold;
         return MultiSelectState;
     }());
     Manifold.MultiSelectState = MultiSelectState;
+})(Manifold || (Manifold = {}));
+
+var Manifold;
+(function (Manifold) {
+    var Translation = (function () {
+        function Translation(value, locale) {
+            this.value = value;
+            this.locale = locale;
+        }
+        return Translation;
+    }());
+    Manifold.Translation = Translation;
 })(Manifold || (Manifold = {}));
 
 var Manifold;
