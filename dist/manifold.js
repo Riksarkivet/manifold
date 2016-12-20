@@ -1,4 +1,4 @@
-// manifold v1.1.4 https://github.com/viewdir/manifold#readme
+// manifold v1.1.9 https://github.com/viewdir/manifold#readme
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.manifold = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 var Manifold;
 (function (Manifold) {
@@ -223,6 +223,8 @@ var Manifold;
         };
         ExternalResource.prototype.getData = function (accessToken) {
             var _this = this;
+            var that = this;
+            that.data = {};
             return new Promise(function (resolve, reject) {
                 // check if dataUri ends with info.json
                 // if not issue a HEAD request.
@@ -725,7 +727,7 @@ var Manifold;
             return this.isPagingEnabled() && this.getTotalCanvases() > 2;
         };
         Helper.prototype.isPagingEnabled = function () {
-            return this.getCurrentSequence().isPagingEnabled();
+            return (this.manifest.isPagingEnabled() || this.getCurrentSequence().isPagingEnabled());
         };
         Helper.prototype.isRightToLeft = function () {
             return this.getViewingDirection().toString() === manifesto.ViewingDirection.rightToLeft().toString();
@@ -1063,6 +1065,46 @@ var Manifold;
         return MultiSelectState;
     }());
     Manifold.MultiSelectState = MultiSelectState;
+})(Manifold || (Manifold = {}));
+
+var Manifold;
+(function (Manifold) {
+    var SearchResult = (function () {
+        function SearchResult(resource, canvasIndex) {
+            this.rects = [];
+            this.canvasIndex = canvasIndex;
+            this.addRect(resource);
+        }
+        SearchResult.prototype.addRect = function (resource) {
+            var rect = new Manifold.SearchResultRect(resource);
+            rect.canvasIndex = this.canvasIndex;
+            rect.index = this.rects.length;
+            this.rects.push(rect);
+            // sort ascending
+            this.rects.sort(function (a, b) {
+                return a.index - b.index;
+            });
+        };
+        return SearchResult;
+    }());
+    Manifold.SearchResult = SearchResult;
+})(Manifold || (Manifold = {}));
+
+var Manifold;
+(function (Manifold) {
+    var SearchResultRect = (function () {
+        function SearchResultRect(result) {
+            this.isVisible = true;
+            var xywh = result.on.match(/.*xywh=(\d*),(\d*),(\d*),(\d*)/);
+            this.x = Number(xywh[1]);
+            this.y = Number(xywh[2]);
+            this.width = Number(xywh[3]);
+            this.height = Number(xywh[4]);
+            this.chars = result.resource.chars;
+        }
+        return SearchResultRect;
+    }());
+    Manifold.SearchResultRect = SearchResultRect;
 })(Manifold || (Manifold = {}));
 
 var Manifold;

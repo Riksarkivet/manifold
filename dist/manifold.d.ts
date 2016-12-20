@@ -1,4 +1,4 @@
-// manifold v1.1.4 https://github.com/viewdir/manifold#readme
+// manifold v1.1.9 https://github.com/viewdir/manifold#readme
 declare namespace Manifold {
     class StringValue {
         value: string;
@@ -328,6 +328,31 @@ declare namespace Manifold {
         selectAllRanges(selected: boolean): void;
         selectRanges(ranges: IRange[], selected: boolean): void;
         setEnabled(enabled: boolean): void;
+    }
+}
+
+declare namespace Manifold {
+    class SearchResult {
+        canvasIndex: number;
+        rects: SearchResultRect[];
+        constructor(resource: any, canvasIndex: number);
+        addRect(resource: any): void;
+    }
+}
+
+declare namespace Manifold {
+    class SearchResultRect {
+        canvasIndex: number;
+        chars: string;
+        height: number;
+        index: number;
+        isVisible: boolean;
+        viewportX: number;
+        viewportY: number;
+        width: number;
+        x: number;
+        y: number;
+        constructor(result: any);
     }
 }
 

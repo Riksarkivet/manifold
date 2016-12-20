@@ -101,6 +101,8 @@ namespace Manifold {
         }
 
         public getData(accessToken?: Manifesto.IAccessToken): Promise<Manifesto.IExternalResource> {
+            var that = this;
+            that.data = {};
 
             return new Promise<Manifesto.IExternalResource>((resolve, reject) => {
 

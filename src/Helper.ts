@@ -574,8 +574,8 @@ namespace Manifold {
             return this.isPagingEnabled() && this.getTotalCanvases() > 2;
         }
         
-        public isPagingEnabled(): boolean{
-            return this.getCurrentSequence().isPagingEnabled();
+        public isPagingEnabled(): boolean {
+            return (this.manifest.isPagingEnabled() || this.getCurrentSequence().isPagingEnabled());
         }
         
         public isRightToLeft(): boolean {
